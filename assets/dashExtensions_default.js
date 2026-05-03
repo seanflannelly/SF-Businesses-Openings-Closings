@@ -7,16 +7,26 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 high
             } = context.hideout;
             const isSelected = selected.includes(feature.properties.neighborhood);
-            const bizStock = feature.properties.biz_stock;
+            const ratio = feature.properties.open_close_ratio || 1;
 
-            const norm = Math.min(Math.max((bizStock - low) / (high - low), 0), 1);
-            const r = 255;
-            const g = Math.round(165 * (1 - norm));
-            const b = 0;
+            const norm = Math.min(Math.max((ratio - low) / (high - low), 0), 1);
+
+            let r, g, b;
+            if (norm < 0.5) {
+                const t = norm / 0.5;
+                r = Math.round(180 + (240 - 180) * t);
+                g = Math.round(30 + (240 - 30) * t);
+                b = Math.round(30 + (240 - 30) * t);
+            } else {
+                const t = (norm - 0.5) / 0.5;
+                r = Math.round(240 + (30 - 240) * t);
+                g = Math.round(240 + (100 - 240) * t);
+                b = Math.round(240 + (180 - 240) * t);
+            }
 
             return {
-                fillColor: isSelected ? 'steelblue' : `rgb(${r},${g},${b})`,
-                fillOpacity: isSelected ? 0.8 : 0.6,
+                fillColor: isSelected ? '#58d68d' : `rgb(${r},${g},${b})`,
+                fillOpacity: isSelected ? 0.9 : 0.85,
                 color: 'white',
                 weight: 1
             };

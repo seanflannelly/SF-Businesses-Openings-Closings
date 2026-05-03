@@ -3,3 +3,6 @@ __pycache__/functions.cpython-39.pyc
 Pipfile
 CYPLAN255-Final-Project/
 .vscode/settings.json
+visualizations_notebooks/.ipynb_checkpoints/03_visualizations_demographics_neighborhood-checkpoint.ipynb
+visualizations_notebooks/.ipynb_checkpoints/03e_visualizations_naics_demographics_neighborhood-checkpoint.ipynb
+.DS_Store
