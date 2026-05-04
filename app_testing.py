@@ -25,6 +25,11 @@ yearly_totals = (
 yearly_totals['open_close_ratio'] = yearly_totals['opened'] / yearly_totals['closed'].replace(0, float('nan'))
 
 years = sorted(yearly_totals['year'].unique().tolist())
+sectors = sorted(naics_df['naics_group'].unique().tolist())
+
+LOW  = 0.0
+HIGH = 2.0
+MID  = 1.0
 
 def make_geojson(year):
     year_data = yearly_totals[yearly_totals['year'] == year].set_index('nhood')
@@ -33,49 +38,44 @@ def make_geojson(year):
     gdf['closed']           = gdf['neighborhood'].map(year_data['closed']).fillna(0)
     gdf['open_close_ratio'] = gdf['neighborhood'].map(year_data['open_close_ratio'])
 
-    ratios = gdf['open_close_ratio'].dropna()
-    raw_low  = float(ratios.quantile(0.05))
-    raw_high = float(ratios.quantile(0.95))
-    max_dev  = max(abs(raw_high - 1.0), abs(1.0 - raw_low))
-    year_low  = round(1.0 - max_dev, 3)
-    year_high = round(1.0 + max_dev, 3)
+    for idx, row in gdf.iterrows():
+        ratio = row['open_close_ratio']
+        ratio_str = f"{ratio:.2f}" if pd.notna(ratio) else "N/A"
+        gdf.at[idx, 'tooltip'] = (
+            f"<b>{row['neighborhood']}</b><br>"
+            f"Opened: {int(row['opened'])}<br>"
+            f"Closed: {int(row['closed'])}<br>"
+            f"Ratio: {ratio_str}"
+        )
 
-    return json.loads(gdf.to_json()), year_low, year_high
+    return json.loads(gdf.to_json())
 
-geojson_by_year = {}
-bounds_by_year  = {}
-for year in years:
-    geojson, year_low, year_high = make_geojson(year)
-    geojson_by_year[year] = geojson
-    bounds_by_year[year]  = (year_low, year_high)
+geojson_by_year = {year: make_geojson(year) for year in years}
 
-DEFAULT_SELECTION = ['Sunset/Parkside', 'Bayview Hunters Point']
-DEFAULT_YEAR = years[-1]
-default_low, default_high = bounds_by_year[DEFAULT_YEAR]
+DEFAULT_SELECTION = []
+DEFAULT_YEAR = years[-2]
 
 style_handle = assign("""
 function(feature, context) {
-    const { selected, low, high } = context.hideout;
+    const { selected, low, high, mid } = context.hideout;
     const isSelected = selected.includes(feature.properties.neighborhood);
-    const ratio = feature.properties.open_close_ratio || 1;
-
-    const norm = Math.min(Math.max((ratio - low) / (high - low), 0), 1);
+    const ratio = Math.min(Math.max(feature.properties.open_close_ratio || 1, low), high);
 
     let r, g, b;
-    if (norm < 0.5) {
-        const t = norm / 0.5;
-        r = Math.round(180 + (240 - 180) * t);
-        g = Math.round(30  + (240 - 30)  * t);
-        b = Math.round(30  + (240 - 30)  * t);
+    if (ratio < mid) {
+        const t = (ratio - low) / (mid - low);
+        r = 220;
+        g = Math.round(220 * t);
+        b = Math.round(220 * t);
     } else {
-        const t = (norm - 0.5) / 0.5;
-        r = Math.round(240 + (30  - 240) * t);
-        g = Math.round(240 + (100 - 240) * t);
-        b = Math.round(240 + (180 - 240) * t);
+        const t = (ratio - mid) / (high - mid);
+        r = Math.round(220 * (1 - t));
+        g = Math.round(220 * (1 - t));
+        b = 220;
     }
 
     return {
-        fillColor: isSelected ? '#58d68d' : `rgb(${r},${g},${b})`,
+        fillColor: isSelected ? '#27ae60' : `rgb(${r},${g},${b})`,
         fillOpacity: isSelected ? 0.9 : 0.85,
         color: 'white',
         weight: 1
@@ -83,15 +83,7 @@ function(feature, context) {
 }
 """)
 
-color_dict = {
-    'Retail':                     'brown',
-    'Service':                    'teal',
-    'Food & Entertainment':       'orange',
-    'Personal Services':          'lightblue',
-    'Education & Health':         'purple',
-    'Manufacturing & Industrial': 'red',
-    'Utilities & Construction':   'blue'
-}
+neighborhood_colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3']
 
 app.layout = html.Div([
     html.H1('SF Business Openings and Closings'),
@@ -118,16 +110,18 @@ app.layout = html.Div([
                         id='sf-geojson',
                         data=geojson_by_year[DEFAULT_YEAR],
                         options=dict(style=style_handle),
-                        hideout=dict(selected=DEFAULT_SELECTION, low=default_low, high=default_high),
+                        hideout=dict(selected=DEFAULT_SELECTION, low=LOW, high=HIGH, mid=MID),
                         zoomToBounds=True,
                     ),
                     dl.Colorbar(
                         id='colorbar',
-                        colorscale=['#b41e1e', '#f0f0f0', '#1e64b4'],
+                        colorscale=['#dc0000', '#ffffff', '#0000dc'],
                         width=200,
                         height=12,
-                        min=default_low,
-                        max=default_high,
+                        min=LOW,
+                        max=HIGH,
+                        tickValues=[0.0, 1.0, 2.0],
+                        tickText=['0', '1 (equal)', '2+'],
                         position='bottomright',
                     )
                 ],
@@ -136,30 +130,31 @@ app.layout = html.Div([
         ],
         className='map-container'
     ),
-    dcc.Slider(
-        id='year-slider',
-        min=min(years),
-        max=max(years),
-        step=1,
-        value=DEFAULT_YEAR,
-        marks={y: str(y) for y in years},
-    ),
+    html.Div([
+        html.Button('▶ Play', id='play-button', n_clicks=0),
+        dcc.Slider(
+            id='year-slider',
+            min=min(years),
+            max=max(years),
+            step=1,
+            value=DEFAULT_YEAR,
+            marks={y: str(y) for y in years},
+        ),
+    ], style={'display': 'flex', 'alignItems': 'center', 'gap': '12px', 'marginTop': '8px'}),
+    dcc.Interval(id='animation-interval', interval=1000, disabled=True),
 
     html.Div([
         html.Div([
             html.Div('Chart 1', className='chart-placeholder'),
             html.Div([
-                dcc.RadioItems(
-                    id='metric-toggle',
-                    options=[
-                        {'label': 'Openings', 'value': 'opened'},
-                        {'label': 'Closings', 'value': 'closed'},
-                    ],
-                    value='opened',
-                    inline=True,
+                dcc.Dropdown(
+                    id='sector-dropdown',
+                    options=[{'label': 'All Sectors', 'value': 'All'}] + [{'label': s, 'value': s} for s in sectors],
+                    value='All',
+                    clearable=False,
                     style={'marginBottom': '8px', 'fontSize': '13px'}
                 ),
-                html.Div(id='sector-charts', style={'display': 'flex', 'gap': '8px', 'flexWrap': 'wrap'})
+                dcc.Graph(id='sector-chart')
             ], style={
                 'background': '#f5f5f5',
                 'border': '2px dashed #ddd',
@@ -181,10 +176,26 @@ app.layout = html.Div([
 
 
 @callback(
+    Output('year-slider', 'value'),
+    Output('animation-interval', 'disabled'),
+    Output('play-button', 'children'),
+    Input('animation-interval', 'n_intervals'),
+    Input('play-button', 'n_clicks'),
+    State('year-slider', 'value'),
+    State('animation-interval', 'disabled')
+)
+def animate(n_intervals, n_clicks, current_year, is_disabled):
+    if ctx.triggered_id == 'play-button':
+        playing = is_disabled
+        return current_year, not is_disabled, '⏸ Pause' if playing else '▶ Play'
+    next_year = current_year + 1 if current_year < max(years) else min(years)
+    stopped = next_year == min(years)
+    return next_year, stopped, '▶ Play' if stopped else '⏸ Pause'
+
+
+@callback(
     Output('sf-geojson', 'data'),
     Output('sf-geojson', 'hideout'),
-    Output('colorbar', 'min'),
-    Output('colorbar', 'max'),
     Output('selected-neighborhoods', 'data'),
     Output('selected-display', 'children'),
     Input('year-slider', 'value'),
@@ -200,63 +211,57 @@ def update_map(year, n_clicks, clickData, current_selection):
         elif len(current_selection) < 4:
             current_selection.append(clicked)
 
-    year_low, year_high = bounds_by_year[year]
     pills = [html.Span(n, className='pill') for n in current_selection]
     label = pills if current_selection else 'No neighborhoods selected'
 
     return (
         geojson_by_year[year],
-        dict(selected=current_selection, low=year_low, high=year_high),
-        year_low,
-        year_high,
+        dict(selected=current_selection, low=LOW, high=HIGH, mid=MID),
         current_selection,
         label
     )
 
 
 @callback(
-    Output('sector-charts', 'children'),
+    Output('sector-chart', 'figure'),
     Input('selected-neighborhoods', 'data'),
-    Input('metric-toggle', 'value')
+    Input('sector-dropdown', 'value')
 )
-def update_sector_charts(selected, metric):
-    if not selected:
-        return []
+def update_sector_chart(selected, sector):
+    fig = go.Figure()
 
-    metric_max = naics_df[metric].max()
-    chart_height = 260 if len(selected) <= 2 else 200
+    for i, neighborhood in enumerate(selected):
+        if sector == 'All':
+            df = yearly_totals[yearly_totals['nhood'] == neighborhood].sort_values('year')
+        else:
+            df = naics_df[
+                (naics_df['neighborhood'] == neighborhood) &
+                (naics_df['naics_group'] == sector)
+            ].copy().sort_values('year')
+            df['open_close_ratio'] = df['opened'] / df['closed'].replace(0, float('nan'))
 
-    charts = []
-    for neighborhood in selected:
-        df = naics_df[naics_df['neighborhood'] == neighborhood]
-
-        fig = go.Figure()
-        for sector in df['naics_group'].unique():
-            sector_df = df[df['naics_group'] == sector].sort_values('year')
-            fig.add_trace(go.Scatter(
-                x=sector_df['year'],
-                y=sector_df[metric],
-                mode='lines',
-                name=sector,
-                line=dict(color=color_dict.get(sector, 'gray'))
-            ))
-
-        fig.update_layout(
-            title=dict(text=neighborhood, font=dict(size=11)),
-            height=chart_height,
-            margin=dict(l=20, r=10, t=30, b=20),
-            legend=dict(font=dict(size=8)),
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            yaxis=dict(range=[0, metric_max])
-        )
-
-        charts.append(dcc.Graph(
-            figure=fig,
-            style={'flex': 1, 'minWidth': 0}
+        fig.add_trace(go.Scatter(
+            x=df['year'],
+            y=df['open_close_ratio'],
+            mode='lines+markers',
+            name=neighborhood,
+            line=dict(color=neighborhood_colors[i], width=2),
+            marker=dict(size=5)
         ))
 
-    return charts
+    fig.add_hline(y=1, line_dash='dash', line_color='gray', line_width=1)
+
+    fig.update_layout(
+        height=240,
+        margin=dict(l=20, r=10, t=10, b=20),
+        legend=dict(font=dict(size=9)),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        yaxis=dict(range=[0, None], title='Open/Close Ratio'),
+        xaxis=dict(title='Year')
+    )
+
+    return fig
 
 
 if __name__ == '__main__':

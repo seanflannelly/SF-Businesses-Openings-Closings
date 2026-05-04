@@ -4,28 +4,27 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             const {
                 selected,
                 low,
-                high
+                high,
+                mid
             } = context.hideout;
             const isSelected = selected.includes(feature.properties.neighborhood);
-            const ratio = feature.properties.open_close_ratio || 1;
-
-            const norm = Math.min(Math.max((ratio - low) / (high - low), 0), 1);
+            const ratio = Math.min(Math.max(feature.properties.open_close_ratio || 1, low), high);
 
             let r, g, b;
-            if (norm < 0.5) {
-                const t = norm / 0.5;
-                r = Math.round(180 + (240 - 180) * t);
-                g = Math.round(30 + (240 - 30) * t);
-                b = Math.round(30 + (240 - 30) * t);
+            if (ratio < mid) {
+                const t = (ratio - low) / (mid - low);
+                r = 220;
+                g = Math.round(220 * t);
+                b = Math.round(220 * t);
             } else {
-                const t = (norm - 0.5) / 0.5;
-                r = Math.round(240 + (30 - 240) * t);
-                g = Math.round(240 + (100 - 240) * t);
-                b = Math.round(240 + (180 - 240) * t);
+                const t = (ratio - mid) / (high - mid);
+                r = Math.round(220 * (1 - t));
+                g = Math.round(220 * (1 - t));
+                b = 220;
             }
 
             return {
-                fillColor: isSelected ? '#58d68d' : `rgb(${r},${g},${b})`,
+                fillColor: isSelected ? '#27ae60' : `rgb(${r},${g},${b})`,
                 fillOpacity: isSelected ? 0.9 : 0.85,
                 color: 'white',
                 weight: 1
