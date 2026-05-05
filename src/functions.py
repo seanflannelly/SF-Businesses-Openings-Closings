@@ -10,7 +10,6 @@ def group_points_by_poly_year(
     points: gpd.GeoDataFrame,
     polygons: gpd.GeoDataFrame,
     id_col: str = "GEOID",
-    naics_filter: str = None
 ):
     """
     Groups all the business location points by polygon ID, year and status (open or closed).
@@ -44,8 +43,6 @@ def group_points_by_poly_year(
         on=id_col,
         how="left"
     ).fillna(0)
-
-    tracts_plot['naics_filter'] = naics_filter if naics_filter else 'all'
 
     return tracts_plot
 
