@@ -2,6 +2,7 @@ import json
 import pandas as pd
 import geopandas as gpd
 from dash import Dash, dcc, html, Input, Output, State, callback, ctx
+from plotly.subplots import make_subplots
 import dash_leaflet as dl
 from dash_extensions.javascript import assign
 import plotly.graph_objects as go
@@ -13,8 +14,11 @@ sf_map = gpd.read_file('data/processed/open_close_neighs.geojson')
 sf_map = sf_map.to_crs(epsg=4326)
 sf_map = sf_map[sf_map['biz_stock'] >= 50]
 
-naics_df = pd.read_parquet('data/processed/naics_year_charts.parquet')
-yearly_df = pd.read_parquet('data/processed/sf_businesses_nhood_naics.parquet')
+naics_df   = pd.read_parquet('data/processed/naics_year_charts.parquet')
+yearly_df  = pd.read_parquet('data/processed/sf_businesses_nhood_naics.parquet')
+combined_df = pd.read_parquet('data/processed/sf_business_demographics_nhood_naics.parquet')
+demo_df    = combined_df[['neighborhood', 'median_income', 'pct_white', 'pct_black',
+                           'pct_asian', 'pct_latina_o', 'pct_other']].drop_duplicates('neighborhood')
 
 yearly_totals = (
     yearly_df
@@ -24,7 +28,7 @@ yearly_totals = (
 )
 yearly_totals['open_close_ratio'] = yearly_totals['opened'] / yearly_totals['closed'].replace(0, float('nan'))
 
-years = sorted(yearly_totals['year'].unique().tolist())
+years   = sorted(yearly_totals['year'].unique().tolist())
 sectors = sorted(naics_df['naics_group'].unique().tolist())
 
 LOW  = 0.0
@@ -52,8 +56,9 @@ def make_geojson(year):
 
 geojson_by_year = {year: make_geojson(year) for year in years}
 
-DEFAULT_SELECTION = []
-DEFAULT_YEAR = years[-2]
+DEFAULT_SELECTION = ['Sunset/Parkside', 'Bayview Hunters Point']
+DEFAULT_YEAR = 2024
+NEIGHBORHOOD_COLORS = ['#378ADD', '#E87040', '#4CAF50', '#9C27B0']
 
 style_handle = assign("""
 function(feature, context) {
@@ -82,8 +87,6 @@ function(feature, context) {
     };
 }
 """)
-
-neighborhood_colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3']
 
 app.layout = html.Div([
     html.H1('SF Business Openings and Closings'),
@@ -145,7 +148,23 @@ app.layout = html.Div([
 
     html.Div([
         html.Div([
-            html.Div('Chart 1', className='chart-placeholder'),
+            html.Div([
+                dcc.Graph(id='demographics-chart', config={'displayModeBar': False}),
+                html.Div(id='income-display', style={
+                    'display': 'flex',
+                    'gap': '24px',
+                    'justifyContent': 'center',
+                    'flexWrap': 'wrap',
+                    'padding': '8px 0'
+                })
+            ], style={
+                'background': '#f5f5f5',
+                'border': '2px dashed #ddd',
+                'borderRadius': '12px',
+                'padding': '16px',
+                'flex': 1,
+                'overflow': 'hidden'
+            }),
             html.Div([
                 dcc.Dropdown(
                     id='sector-dropdown',
@@ -154,22 +173,20 @@ app.layout = html.Div([
                     clearable=False,
                     style={'marginBottom': '8px', 'fontSize': '13px'}
                 ),
-                dcc.Graph(id='sector-chart')
+                dcc.Graph(id='sector-chart', config={'displayModeBar': False})
             ], style={
                 'background': '#f5f5f5',
                 'border': '2px dashed #ddd',
                 'borderRadius': '12px',
                 'padding': '16px',
                 'flex': 1,
-                'minHeight': '300px',
-                'maxHeight': '300px',
                 'overflow': 'hidden'
             }),
-        ], style={'display': 'flex', 'gap': '16px', 'height': '300px'}),
+        ], style={'display': 'flex', 'gap': '16px'}),
         html.Div([
             html.Div('Chart 3', className='chart-placeholder'),
             html.Div('Chart 4', className='chart-placeholder'),
-        ], style={'display': 'flex', 'gap': '16px', 'height': '300px'}),
+        ], style={'display': 'flex', 'gap': '16px'}),
     ], style={'display': 'flex', 'flexDirection': 'column', 'gap': '16px', 'marginTop': '24px'})
 
 ], className='app-wrapper')
@@ -185,12 +202,14 @@ app.layout = html.Div([
     State('animation-interval', 'disabled')
 )
 def animate(n_intervals, n_clicks, current_year, is_disabled):
+    if not n_clicks:
+        return current_year, True, '▶ Play'
     if ctx.triggered_id == 'play-button':
         playing = is_disabled
         return current_year, not is_disabled, '⏸ Pause' if playing else '▶ Play'
-    next_year = current_year + 1 if current_year < max(years) else min(years)
-    stopped = next_year == min(years)
-    return next_year, stopped, '▶ Play' if stopped else '⏸ Pause'
+    if current_year >= max(years):
+        return current_year, True, '▶ Play'
+    return current_year + 1, False, '⏸ Pause'
 
 
 @callback(
@@ -223,6 +242,49 @@ def update_map(year, n_clicks, clickData, current_selection):
 
 
 @callback(
+    Output('demographics-chart', 'figure'),
+    Output('income-display', 'children'),
+    Input('selected-neighborhoods', 'data')
+)
+def update_demographics(selected):
+    race_cols   = ['pct_white', 'pct_black', 'pct_asian', 'pct_latina_o', 'pct_other']
+    race_labels = ['White', 'Black', 'Asian/PI', 'Latino', 'Other']
+
+    fig = go.Figure()
+    for i, neighborhood in enumerate(selected):
+        row = demo_df[demo_df['neighborhood'] == neighborhood].iloc[0]
+        values = [row[c] * 100 for c in race_cols]
+        fig.add_trace(go.Bar(
+            name=neighborhood,
+            x=race_labels,
+            y=values,
+            marker_color=NEIGHBORHOOD_COLORS[i]
+        ))
+
+    fig.update_layout(
+        barmode='group',
+        height=220,
+        margin=dict(l=20, r=20, t=10, b=20),
+        legend=dict(font=dict(size=8)),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        yaxis=dict(range=[0, 100], title='% of population'),
+    )
+
+    income_pills = []
+    for i, neighborhood in enumerate(selected):
+        row = demo_df[demo_df['neighborhood'] == neighborhood].iloc[0]
+        income = row['median_income']
+        income_str = f"${income:,.0f}" if pd.notna(income) else 'No data'
+        income_pills.append(html.Div([
+            html.Div(income_str, style={'fontSize': '18px', 'fontWeight': '600', 'color': NEIGHBORHOOD_COLORS[i]}),
+            html.Div(neighborhood, style={'fontSize': '11px', 'color': '#888'})
+        ], style={'textAlign': 'center'}))
+
+    return fig, income_pills
+
+
+@callback(
     Output('sector-chart', 'figure'),
     Input('selected-neighborhoods', 'data'),
     Input('sector-dropdown', 'value')
@@ -245,14 +307,14 @@ def update_sector_chart(selected, sector):
             y=df['open_close_ratio'],
             mode='lines+markers',
             name=neighborhood,
-            line=dict(color=neighborhood_colors[i], width=2),
+            line=dict(color=NEIGHBORHOOD_COLORS[i], width=2),
             marker=dict(size=5)
         ))
 
     fig.add_hline(y=1, line_dash='dash', line_color='gray', line_width=1)
 
     fig.update_layout(
-        height=240,
+        height=260,
         margin=dict(l=20, r=10, t=10, b=20),
         legend=dict(font=dict(size=9)),
         paper_bgcolor='rgba(0,0,0,0)',
