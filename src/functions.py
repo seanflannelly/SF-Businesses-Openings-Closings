@@ -76,10 +76,6 @@ def group_points_by_poly(
 
     return tracts_plot
 
-
-#big crosswalk dictionary for businesses that have a business license code but no naics code. built using license code descriptions from the data
-# broader categories are built using the NAICS-code supergroupings used by Meltzer (2016)
-# dictionary created using ai assistance
 LIC_TO_NAICS_GROUP = {
     # Retail
     'H03': 'Retail', 'H07': 'Retail', 'H31': 'Retail', 'H61': 'Retail',
@@ -107,17 +103,17 @@ LIC_TO_NAICS_GROUP = {
     'SSFCP': 'Food & Entertainment', 'RSSFCP': 'Food & Entertainment',
     'RSSPP': 'Food & Entertainment', 'CCFP': 'Food & Entertainment',
 
-    # Personal Services
-    'H46': 'Personal Services', 'H48': 'Personal Services',
-    'H67': 'Personal Services', 'H68': 'Personal Services',
-    'H69': 'Personal Services', 'H70': 'Personal Services',
-    'H44': 'Personal Services', 'H43': 'Personal Services',
-    'C01': 'Personal Services', 'C02': 'Personal Services',
-    'J01': 'Personal Services', 'J02': 'Personal Services',
-    'H56': 'Personal Services', 'H57': 'Personal Services',
-    'HHH': 'Personal Services', 'P43': 'Personal Services',
-    'P48': 'Personal Services', 'P51': 'Personal Services',
-    'Q05': 'Personal Services',
+    # Consumer Services
+    'H46': 'Consumer Services', 'H48': 'Consumer Services',
+    'H67': 'Consumer Services', 'H68': 'Consumer Services',
+    'H69': 'Consumer Services', 'H70': 'Consumer Services',
+    'H44': 'Consumer Services', 'H43': 'Consumer Services',
+    'C01': 'Consumer Services', 'C02': 'Consumer Services',
+    'J01': 'Consumer Services', 'J02': 'Consumer Services',
+    'H56': 'Consumer Services', 'H57': 'Consumer Services',
+    'HHH': 'Consumer Services', 'P43': 'Consumer Services',
+    'P48': 'Consumer Services', 'P51': 'Consumer Services',
+    'Q05': 'Consumer Services',
 
     # Manufacturing & Industrial
     'D23': 'Manufacturing & Industrial', 'D24': 'Manufacturing & Industrial',
@@ -147,37 +143,37 @@ LIC_TO_NAICS_GROUP = {
 
 NAICS_GROUPS = {
     'Retail':                               ['4400-4599', '4500-4599'],
-    'Service':                              ['5100-5199', '5210-5239', '5240-5249', '5300-5399', '5400-5499', '5500-5599', '5600-5699'],
+    'Professional & Business Services':     ['5100-5199', '5210-5239', '5240-5249', '5300-5399', '5400-5499', '5500-5599', '5600-5699'],
     'Food & Entertainment':                 ['7100-7199', '7200-7299'],
-    'Personal Services':                    ['8100-8139'],
+    'Consumer Services':                    ['8100-8139'],
     'Education & Health':                   ['6100-6299'],
     'Manufacturing & Industrial':           ['3100-3399', '4200-4299', '4800-4999'],
     'Utilities & Construction':             ['2200-2299', '2300-2399'],
 }
 
 def assign_naics_group(naics_code: str) -> str:
-    """Assigns a supergroup from naics codes"""
+    """Assigns a sector group from a NAICS code string."""
     if not isinstance(naics_code, str):
-        return None
+        return 'No Code'
     for group, codes in NAICS_GROUPS.items():
         if naics_code in codes:
             return group
-    return None
+    return 'No Code'
 
 def assign_group_from_lic(lic_code: str) -> str:
     """
-    Assigns a supergroup from lic_code.
-    For multiple codes, if license can apply twice to same category, it only returns once
+    Assigns a sector group from a lic_code string.
+    For multiple codes, picks the sector that appears most frequently.
     """
     if not isinstance(lic_code, str):
-        return 'Other'
+        return 'No Code'
     groups = []
     for code in lic_code.strip().split():
         group = LIC_TO_NAICS_GROUP.get(code)
         if group:
             groups.append(group)
     if not groups:
-        return 'Other'
+        return 'No Code'
     return max(set(groups), key=groups.count)
 
 def group_points_by_poly_naics_year(
@@ -190,6 +186,7 @@ def group_points_by_poly_naics_year(
     Sector groups follow Meltzer (2016) NAICS groupings.
     Businesses with multiple NAICS codes are exploded so each code gets its own row.
     Businesses missing NAICS codes are classified via lic_code using a majority vote crosswalk.
+    Businesses with neither code are labeled 'No Code' and retained.
 
     Parameters:
         points: geodataframe with point data
@@ -197,7 +194,7 @@ def group_points_by_poly_naics_year(
         id_col: column name to use as the polygon identifier (default: "GEOID")
 
     Returns:
-        GeoDataFrame grouped by polygon, sector group, and year
+        DataFrame grouped by polygon, sector group, and year
     """
     points = gpd.sjoin(points, polygons, how="left", predicate="within")
 
@@ -208,10 +205,8 @@ def group_points_by_poly_naics_year(
 
     points['naics_group'] = points['naics_code'].apply(assign_naics_group)
 
-    missing_mask = points['naics_group'].isna()
+    missing_mask = points['naics_group'] == 'No Code'
     points.loc[missing_mask, 'naics_group'] = points.loc[missing_mask, 'lic_code'].apply(assign_group_from_lic)
-
-    points = points[points['naics_group'] != 'Other'].copy()
 
     tract_naics_year = (
         points
