@@ -219,7 +219,7 @@ def group_points_by_poly_naics_year(
         .sort_values(year_col)
     )
 
-    geom = polygons[[id_col]].drop_duplicates(id_col)
+    geom = polygons[[id_col, 'geometry']].drop_duplicates(id_col)
     result = geom.merge(tract_naics_year, on=id_col, how='left').fillna(0)
-
-    return result
+    
+    return gpd.GeoDataFrame(result, geometry='geometry', crs=polygons.crs)
