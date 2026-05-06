@@ -20,12 +20,20 @@ resilience = pd.read_parquet('data/processed/app/resilience.parquet')
 years = sorted(neighs_year['year'].unique().tolist())
 sectors = sorted(naics_neighs['naics_group'].unique().tolist())
 
-# build geojson for each year
+# build geojson for each year with tooltip properties
 def make_geojson(year):
     year_data = neighs_year[neighs_year['year'] == year][
         ['neighborhood', 'opened', 'closed', 'open_close_ratio']
     ]
     gdf = sf_neigh.merge(year_data, on='neighborhood', how='left')
+    for idx, row in gdf.iterrows():
+        ratio = row['open_close_ratio']
+        gdf.at[idx, 'tooltip'] = (
+            f"<b>{row['neighborhood']}</b><br>"
+            f"Opened: {int(row['opened']) if pd.notna(row['opened']) else 'N/A'}<br>"
+            f"Closed: {int(row['closed']) if pd.notna(row['closed']) else 'N/A'}<br>"
+            f"Ratio: {f'{ratio:.2f}' if pd.notna(ratio) else 'N/A'}"
+        )
     return json.loads(gdf.to_json())
 
 geojson_by_year = {year: make_geojson(year) for year in years}
@@ -110,6 +118,7 @@ app.layout = html.Div([
                     options=dict(style=style_handle),
                     hideout=dict(selected=default_selection, low=0.0, high=2.0, mid=1.0),
                     zoomToBounds=True,
+                    tooltip=dict(sticky=True),
                 ),
                 dl.Colorbar(
                     colorscale=['#dc0000', '#ffffff', '#0000dc'],
