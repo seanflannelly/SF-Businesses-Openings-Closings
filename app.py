@@ -475,10 +475,10 @@ def update_resilience_chart(selected):
 
     # quadrant labels at corners
     for x, y, text, xanchor, yanchor in [
-        (x_max + x_pad * 0.5, y_max + y_pad * 0.5, 'High vitality<br>Strong recovery', 'right', 'top'),
-        (x_min - x_pad * 0.5, y_max + y_pad * 0.5, 'Low vitality<br>Strong recovery',  'left',  'top'),
-        (x_min - x_pad * 0.5, y_min - y_pad * 0.5, 'Low vitality<br>Weak recovery',    'left',  'bottom'),
-        (x_max + x_pad * 0.5, y_min - y_pad * 0.5, 'High vitality<br>Weak recovery',   'right', 'bottom'),
+        (x_max + x_pad * 0.5, y_max + y_pad * 0.5, 'Growth during COVID +<br>Strong recovery', 'right', 'top'),
+        (x_min - x_pad * 0.5, y_max + y_pad * 0.5, 'Decline during COVID +<br>Strong recovery',  'left',  'top'),
+        (x_min - x_pad * 0.5, y_min - y_pad * 0.5, 'Decline during COVID +<br>Weak recovery',    'left',  'bottom'),
+        (x_max + x_pad * 0.5, y_min - y_pad * 0.5, 'Growth during COVID +<br>Weak recovery',   'right', 'bottom'),
     ]:
         fig.add_annotation(
             x=x, y=y, text=text, showarrow=False,
@@ -493,12 +493,12 @@ def update_resilience_chart(selected):
     fig.update_layout(
         title=dict(text='Business Pandemic Resilience by Neighborhood', font=dict(size=13, color='#444'), x=0),
         xaxis=dict(
-            title=dict(text='Business Vitality During Pandemic (2020–2021)', font=dict(size=11)),
+            title=dict(text='Openings/Closings Ratio During Pandemic (2020–2021)', font=dict(size=11)),
             range=[x_min - x_pad, x_max + x_pad],
             **AXIS_STYLE
         ),
         yaxis=dict(
-            title=dict(text='Business Vitality During Recovery (2022–2024)', font=dict(size=11)),
+            title=dict(text='Openings/Closings Ratio During Recovery (2022–2024)', font=dict(size=11)),
             range=[y_min - y_pad, y_max + y_pad],
             **AXIS_STYLE
         ),
