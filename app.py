@@ -118,7 +118,6 @@ app.layout = html.Div([
                     options=dict(style=style_handle),
                     hideout=dict(selected=default_selection, low=0.0, high=2.0, mid=1.0),
                     zoomToBounds=True,
-                    tooltip=dict(sticky=True),
                 ),
                 dl.Colorbar(
                     colorscale=['#dc0000', '#ffffff', '#0000dc'],
