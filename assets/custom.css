@@ -4,14 +4,6 @@ body {
     color: #222;
 }
 
-h1 {
-    font-size: 1.8rem;
-    font-weight: 600;
-    color: #222;
-    letter-spacing: -0.5px;
-    margin-bottom: 4px;
-}
-
 h2, h3 {
     font-weight: 500;
     color: #444;
@@ -30,14 +22,7 @@ h2, h3 {
     font-weight: 500;
 }
 
-.pill {
-    background: steelblue;
-    color: white;
-    border-radius: 999px;
-    padding: 4px 14px;
-    font-size: 13px;
-    font-weight: 500;
-}
+
 
 .map-container {
     border: 2px solid #e0e0e0;
@@ -45,11 +30,7 @@ h2, h3 {
     overflow: hidden;
 }
 
-.app-wrapper {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 32px 24px;
-}
+
 
 .leaflet-interactive:focus {
     outline: none;
@@ -57,4 +38,26 @@ h2, h3 {
 
 .leaflet-tooltip {
     font-weight: normal;
+}
+
+.app-wrapper {
+    background: #f0f0fa;
+    padding: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.pill {
+    background: #378ADD;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+h1 {
+    font-size: 28px;
+    font-weight: 800;
+    color: #222;
+    letter-spacing: -0.5px;
 }

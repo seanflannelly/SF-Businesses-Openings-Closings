@@ -1,0 +1,8 @@
+.DS_Store
+.env
+notebooks/processing/__pycache__/functions.cpython-313.pyc
+notebooks/processing/.ipynb_checkpoints/03_scatterplot_neighs-checkpoint.ipynb
+notebooks/processing/.ipynb_checkpoints/02d_processing_nbhd_scatterplot_demographics-checkpoint.ipynb
+notebooks/processing/.ipynb_checkpoints/02b_demographics_by_neigh-checkpoint.ipynb
+notebooks/processing/.ipynb_checkpoints/02_grouping_by_neigh-checkpoint.ipynb
+data/processed/polygons/.ipynb_checkpoints/sf_neighborhoods-checkpoint.geojson
