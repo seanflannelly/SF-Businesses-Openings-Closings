@@ -1,0 +1,60 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: #ede8f0;
+    color: #222;
+}
+
+h1 {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #222;
+    letter-spacing: -0.5px;
+    margin-bottom: 4px;
+}
+
+h2, h3 {
+    font-weight: 500;
+    color: #444;
+}
+
+.chart-placeholder {
+    background: #f5f5f5;
+    border: 2px dashed #ddd;
+    border-radius: 12px;
+    height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #bbb;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.pill {
+    background: steelblue;
+    color: white;
+    border-radius: 999px;
+    padding: 4px 14px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.map-container {
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.app-wrapper {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 24px;
+}
+
+.leaflet-interactive:focus {
+    outline: none;
+}
+
+.leaflet-tooltip {
+    font-weight: normal;
+}
