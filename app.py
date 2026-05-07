@@ -59,7 +59,7 @@ def make_geojson(year, sector='All'):
 
 # --- constants -----------------------------------------------------
 default_selection = []
-default_year   = 2024
+default_year   = 2019
 default_sector = 'All'
 default_mode   = 'recovery'
 
@@ -561,4 +561,4 @@ def update_survival_chart(selected, sector):
 
 #running the app
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)
