@@ -109,11 +109,11 @@ function(feature, context) {
 # ── layout ────────────────────────────────────────────────────────────────────
 app.layout = html.Div([
 
-    html.H1('San Francisco Neighborhood Business Trends'),
+    html.H1('San Francisco Neighborhood Business Trends', style={'padding':'1px'}),
 
     # sector filter — sticky so it stays visible while scrolling through charts
     html.Div([
-        html.Span('Sector:', style={'fontSize': '13px', 'fontWeight': '600', 'color': '#374151'}),
+        html.Span('Choose a business sector to filter by:', style={'fontSize': '13px', 'fontWeight': '600', 'color': '#374151'}),
         dcc.Dropdown(
             id='sector-dropdown',
             options=[{'label': 'All Sectors', 'value': 'All'}] +
@@ -191,7 +191,7 @@ app.layout = html.Div([
 
             # open/close ratio over time, filtered by the global sector dropdown
             html.Div([
-                html.P('Business Vitality Over Time',
+                html.P(id='sector-chart-title',
                        style={'fontSize': '13px', 'fontWeight': '600', 'color': '#444', 'margin': '0 0 4px 0'}),
                 dcc.Graph(id='sector-chart', config={'displayModeBar': False}),
             ], style=card),
@@ -200,7 +200,7 @@ app.layout = html.Div([
 
         # second sector dropdown — visible when sticky bar has scrolled out of view
         html.Div([
-            html.Span('Sector:', style={'fontSize': '13px', 'fontWeight': '600', 'color': '#374151'}),
+            html.Span('Choose a business sector to filter by:', style={'fontSize': '13px', 'fontWeight': '600', 'color': '#374151'}),
             dcc.Dropdown(
                 id='sector-dropdown-2',
                 options=[{'label': 'All Sectors', 'value': 'All'}] +
@@ -365,6 +365,7 @@ def update_demographics(selected):
 
 @callback(
     Output('sector-chart', 'figure'),
+    Output('sector-chart-title', 'children'),
     Input('selected-neighborhoods', 'data'),
     Input('sector-dropdown', 'value'),
 )
@@ -416,7 +417,7 @@ def update_sector_chart(selected, sector):
         yaxis=dict(range=[0, None], title=dict(text='Open/Close Ratio', font=dict(size=11)), **axis),
         xaxis=dict(title=dict(text='Year', font=dict(size=11)), tickfont=dict(size=10)),
     )
-    return fig
+    return fig, f'Opening/Closing Ratio Over Time for {sector} businesses'
 
 
 @callback(
@@ -507,4 +508,4 @@ def update_resilience_chart(selected, sector):
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)
