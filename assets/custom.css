@@ -91,3 +91,8 @@ h2, h3 {
 .leaflet-tooltip {
     font-weight: normal;
 }
+
+.leaflet-control-colorbar {
+    margin-right: 50px !important;  /* important overrides the leaflet native styling */
+    margin-bottom: 8px !important;
+}

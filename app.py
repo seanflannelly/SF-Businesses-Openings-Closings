@@ -7,53 +7,61 @@ from dash_extensions.javascript import assign
 import plotly.graph_objects as go
 
 app = Dash(__name__)
-server = app.server
+server = app.server  
 
-# ── data ──────────────────────────────────────────────────────────────────────
-neighs_year = pd.read_parquet('data/processed/app/neighs_year.parquet')
-naics_neighs = pd.read_parquet('data/processed/app/naics_neighs.parquet')
-sf_neigh    = gpd.read_file('data/processed/app/neighborhoods.geojson')
-demo        = pd.read_parquet('data/processed/app/demographics.parquet')
-city_demo   = pd.read_parquet('data/processed/app/demographics_city.parquet')
-resilience           = pd.read_parquet('data/processed/app/resilience.parquet')
-resilience_by_sector = pd.read_parquet('data/processed/app/resilience_by_sector.parquet')
+# --- data ---------------------------------------------------------- --------------------------------------------------
+# neighs_year: one row per neighborhood per year, all sectors combined
+# naics_neighs: one row per neighborhood per year per sector (one business with multiple codes can appear in multiple sectors)
+# survival_by_sector: pre-2020 survival rate + recovery ratio per neighborhood per sector
+neighs_year        = pd.read_parquet('data/processed/app/neighs_year.parquet')
+naics_neighs       = pd.read_parquet('data/processed/app/naics_neighs.parquet')
+sf_neigh           = gpd.read_file('data/processed/app/neighborhoods.geojson')
+demo               = pd.read_parquet('data/processed/app/demographics.parquet')
+city_demo          = pd.read_parquet('data/processed/app/demographics_city.parquet').iloc[0]
+survival_by_sector = pd.read_parquet('data/processed/app/survival_by_sector.parquet')
+survival_stats     = pd.read_parquet('data/processed/app/survival_stats.parquet').set_index('naics_group').to_dict('index')
 
 years   = sorted(neighs_year['year'].unique().tolist())
 sectors = sorted(naics_neighs['naics_group'].unique().tolist())
 
-# need to make a new geojson out of the neighs_year 
+slider_years = {}
+for y in years:
+    slider_years[int(y)] = str(y)
+
+# need to make a new geojson out of the neighs_year for the tooltip property in leaflet
+# this gets called on map startup and on update_map callback
 def make_geojson(year, sector='All'):
-    """Merge neighborhood geometry with business stats for the given year/sector."""
-    if sector == 'All':
+    if year == 'recovery':
+        # aggregate 2022-2024 for the recovery period view
+        if sector == 'All':
+            year_data = neighs_year[neighs_year['year'].between(2022, 2024)].groupby('neighborhood')[['opened', 'closed']].sum().reset_index()
+        else:
+            year_data = naics_neighs[(naics_neighs['naics_group'] == sector) & (naics_neighs['year'].between(2022, 2024))].groupby('neighborhood')[['opened', 'closed']].sum().reset_index()
+        year_data['open_close_ratio'] = year_data['opened'] / year_data['closed'].replace(0, float('nan'))
+    elif sector == 'All':
         year_data = neighs_year[neighs_year['year'] == year][
             ['neighborhood', 'opened', 'closed', 'open_close_ratio']
         ]
     else:
-        # naics_neighs doesn't carry a pre-computed ratio column
-        sector_data = naics_neighs[
+        year_data = naics_neighs[
             (naics_neighs['naics_group'] == sector) & (naics_neighs['year'] == year)
-        ][['neighborhood', 'opened', 'closed']].copy()
-        sector_data['open_close_ratio'] = (
-            sector_data['opened'] / sector_data['closed'].replace(0, float('nan'))
-        )
-        year_data = sector_data
+        ][['neighborhood', 'opened', 'closed', 'open_close_ratio']].copy()
 
     gdf = sf_neigh.merge(year_data, on='neighborhood', how='left')
-    for idx, row in gdf.iterrows():
-        ratio = row['open_close_ratio']
-        gdf.at[idx, 'tooltip'] = (
-            f"<b>{row['neighborhood']}</b><br>"
-            f"Opened: {int(row['opened']) if pd.notna(row['opened']) else 'N/A'}<br>"
-            f"Closed: {int(row['closed']) if pd.notna(row['closed']) else 'N/A'}<br>"
-            f"Ratio: {f'{ratio:.2f}' if pd.notna(ratio) else 'N/A'}"
-        )
+    gdf['tooltip'] = (
+        '<b>' + gdf['neighborhood'] + '</b><br>' +
+        'Opened: ' + gdf['opened'].fillna('N/A').astype(str) + '<br>' +
+        'Closed: ' + gdf['closed'].fillna('N/A').astype(str) + '<br>' +
+        'Ratio: ' + gdf['open_close_ratio'].round(2).fillna('N/A').astype(str)
+    )
     return json.loads(gdf.to_json())
 
 
-# ── constants ─────────────────────────────────────────────────────────────────
+# --- constants -----------------------------------------------------
 default_selection = []
 default_year   = 2024
 default_sector = 'All'
+default_mode   = 'recovery'
 
 colors     = ['#378ADD', '#E87040', '#4CAF50', '#9C27B0']  # up to 4 neighborhoods
 city_color = '#2C7BB6'
@@ -71,10 +79,10 @@ card = {
 }
 
 # shared axis style for plotly charts
-axis = dict(showgrid=True, gridcolor='#f5f5f5', zeroline=False, tickfont=dict(size=10))
+axis = dict(showgrid=True, gridcolor='whitesmoke', zeroline=False, tickfont=dict(size=10))
 
 
-# ── map styling ───────────────────────────────────────────────────────────────
+# --- map styling ---------------------------------------------------
 # red = more closings, blue = more openings; selected neighborhoods go green
 style_handle = assign("""
 function(feature, context) {
@@ -106,12 +114,13 @@ function(feature, context) {
 """)
 
 
-# ── layout ────────────────────────────────────────────────────────────────────
+# --- html layout --------------------------------------------------------
+#each 'id' is linked to a callback below
 app.layout = html.Div([
 
     html.H1('San Francisco Neighborhood Business Trends', style={'padding':'1px'}),
 
-    # sector filter — sticky so it stays visible while scrolling through charts
+    # sector filter dropdown
     html.Div([
         html.Span('Choose a business sector to filter by:', style={'fontSize': '13px', 'fontWeight': '600', 'color': '#374151'}),
         dcc.Dropdown(
@@ -124,6 +133,7 @@ app.layout = html.Div([
         ),
     ], className='sector-bar'),
 
+    #selected neighborhood indicator with pillbox styling
     html.P('Selected neighborhoods:'),
     html.Div(id='selected-display',
              style={'display': 'flex', 'gap': '8px', 'padding': '10px 0', 'flexWrap': 'wrap'}),
@@ -141,20 +151,23 @@ app.layout = html.Div([
             center=[37.7749, -122.4194],
             zoom=12,
             children=[
+                #basemap
                 dl.TileLayer(url='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'),
+                #active map, calling make_geojson function above to update data
                 dl.GeoJSON(
                     id='sf-geojson',
-                    data=make_geojson(default_year, default_sector),
+                    data=make_geojson(default_mode, default_sector),
                     options=dict(style=style_handle),
                     hideout=dict(selected=default_selection, low=0.0, high=2.0, mid=1.0),
                     zoomToBounds=True,
                 ),
+                #color bar
                 dl.Colorbar(
-                    colorscale=['#dc0000', '#ffffff', '#0000dc'],
+                    colorscale=['#dc0000', 'white', '#0000dc'],
                     width=200, height=12,
                     min=0.0, max=2.0,
-                    tickValues=[0.0, 1.0, 2.0],
-                    tickText=['0', '1 (equal)', '2+'],
+                    tickValues=[0.0, 2.0],
+                    tickText=['0<br>More closings', '2+<br>More openings'],
                     position='bottomright',
                 ),
             ],
@@ -162,16 +175,29 @@ app.layout = html.Div([
         ),
     ], className='map-container'),
 
-    # year slider + play button
+    # toggle between recovery period aggregate and year-by-year view
+    dcc.RadioItems(
+        id='map-mode',
+        options=[
+            {'label': 'Recovery Period (2022–2024)', 'value': 'recovery'},
+            {'label': 'Year by Year', 'value': 'year'},
+        ],
+        value=default_mode,
+        inline=True,
+        style={'fontSize': '13px', 'marginTop': '12px', 'gap': '16px'},
+    ),
+
+    # year slider + play button — hidden when recovery mode is active
     html.Div([
         html.Button('▶ Play', id='play-button', n_clicks=0),
         dcc.Slider(
             id='year-slider',
             min=min(years), max=max(years), step=1,
             value=default_year,
-            marks={y: str(y) for y in years},
+            marks=slider_years,
         ),
-    ], style={'display': 'flex', 'alignItems': 'center', 'gap': '12px', 'marginTop': '8px'}),
+    ], id='slider-container',
+       style={'display': 'none', 'alignItems': 'center', 'gap': '12px', 'marginTop': '8px'}),
     dcc.Interval(id='animation-interval', interval=1000, disabled=True),
 
     # charts
@@ -180,19 +206,21 @@ app.layout = html.Div([
             # demographics breakdown for selected neighborhoods
             html.Div([
                 html.P('Neighborhood Demographics',
-                       style={'fontSize': '13px', 'fontWeight': '600', 'color': '#444', 'margin': '0 0 8px 0'}),
+                       style={'fontSize': '13px', 'fontWeight': '600', 'color': 'dimgray', 'margin': '0 0 8px 0'}),
                 dcc.Graph(id='demographics-chart', config={'displayModeBar': False}),
                 html.P('Median Household Income',
-                       style={'fontSize': '11px', 'color': '#999', 'textAlign': 'center', 'margin': '4px 0 2px 0'}),
+                       style={'fontSize': '11px', 'color': 'darkgray', 'textAlign': 'center', 'margin': '4px 0 2px 0'}),
                 html.Div(id='income-display',
                          style={'display': 'flex', 'gap': '24px', 'justifyContent': 'center',
                                 'flexWrap': 'wrap', 'padding': '4px 0'}),
+                html.P('Source: U.S. Census Bureau, American Community Survey 5-Year Estimates',
+                       style={'fontSize': '10px', 'color': 'darkgray', 'margin': '8px 0 0 0'}),
             ], style=card),
 
             # open/close ratio over time, filtered by the global sector dropdown
             html.Div([
                 html.P(id='sector-chart-title',
-                       style={'fontSize': '13px', 'fontWeight': '600', 'color': '#444', 'margin': '0 0 4px 0'}),
+                       style={'fontSize': '13px', 'fontWeight': '600', 'color': 'dimgray', 'margin': '0 0 4px 0'}),
                 dcc.Graph(id='sector-chart', config={'displayModeBar': False}),
             ], style=card),
 
@@ -212,20 +240,30 @@ app.layout = html.Div([
         ], style={'display': 'flex', 'alignItems': 'center', 'gap': '10px',
                   'padding': '10px 0', 'borderBottom': '1px solid #e2e4e9'}),
 
-        # pandemic resilience scatter — all sectors, click to select neighborhoods
+        # survival scatter — click to select neighborhoods
         html.Div([
             html.Div([
-                dcc.Graph(id='resilience-chart', config={'displayModeBar': False}),
+                html.Div([
+                    html.P(id='survival-chart-title',
+                           style={'fontSize': '13px', 'fontWeight': '600', 'color': 'dimgray', 'margin': 0}),
+                    html.P('Hover over a point to see details. Click to select a neighborhood.',
+                           style={'fontSize': '12px', 'color': 'darkgray', 'margin': 0}),
+                ], style={'display': 'flex', 'justifyContent': 'space-between', 'alignItems': 'baseline', 'marginBottom': '4px'}),
+                dcc.Graph(id='survival-chart', config={'displayModeBar': False}),
             ], style=card),
         ], style={'display': 'flex', 'gap': '16px'}),
 
     ], style={'display': 'flex', 'flexDirection': 'column', 'gap': '16px', 'marginTop': '24px'}),
 
+    html.P('Source: City and County of San Francisco Treasurer & Tax Collector\'s Office',
+           style={'fontSize': '10px', 'color': 'darkgray', 'marginTop': '24px'}),
+
 ], className='app-wrapper')
 
 
-# ── callbacks ─────────────────────────────────────────────────────────────────
+# --- callbacks -----------------------------------------------------
 
+#we have two dropdowns because of the scroll, so just making sure they are synced
 @callback(
     Output('sector-dropdown', 'value', allow_duplicate=True),
     Output('sector-dropdown-2', 'value', allow_duplicate=True),
@@ -237,64 +275,63 @@ def sync_sector_dropdowns(val1, val2):
     return (val1, val1) if ctx.triggered_id == 'sector-dropdown' else (val2, val2)
 
 
+# show/hide the slider based on which map mode is selected
 @callback(
-    Output('year-slider', 'max'),
-    Output('year-slider', 'marks'),
-    Output('year-slider', 'value'),
-    Input('sector-dropdown', 'value'),
-    State('year-slider', 'value'),
+    Output('slider-container', 'style'),
+    Input('map-mode', 'value'),
 )
-def update_slider_range(sector, current_year):
-    # sector-level data is only complete through 2024
-    max_year = 2024 if sector != 'All' else max(years)
-    visible = [y for y in years if y <= max_year]
-    return max_year, {y: str(y) for y in visible}, min(current_year, max_year)
+def toggle_slider(mode):
+    if mode == 'recovery':
+        return {'display': 'none'}
+    return {'display': 'flex', 'alignItems': 'center', 'gap': '12px', 'marginTop': '8px'}
 
 
+# year slider animation 
 @callback(
     Output('year-slider', 'value', allow_duplicate=True),
     Output('animation-interval', 'disabled'),
     Output('play-button', 'children'),
     Input('animation-interval', 'n_intervals'),
     Input('play-button', 'n_clicks'),
+    Input('map-mode', 'value'),
     State('year-slider', 'value'),
     State('year-slider', 'max'),
     State('animation-interval', 'disabled'),
     prevent_initial_call=True,
 )
-def animate(n_intervals, n_clicks, current_year, max_year, is_disabled):
-    if not n_clicks:
+def animate(n_intervals, n_clicks, mode, current_year, max_year, is_disabled):
+    if mode == 'recovery' or not n_clicks:
         return current_year, True, '▶ Play'
     if ctx.triggered_id == 'play-button':
-        playing = is_disabled
-        return current_year, not is_disabled, '⏸ Pause' if playing else '▶ Play'
+        return current_year, not is_disabled, '⏸ Pause' if is_disabled else '▶ Play'
     if current_year >= max_year:
         return min(years), True, '▶ Play'
     return current_year + 1, False, '⏸ Pause'
 
 
+##updating the map whenever the mode or sector is changed, and whenever the year slider is active
 @callback(
     Output('sf-geojson', 'data'),
-    Output('sf-geojson', 'hideout'),
+    Output('sf-geojson', 'hideout'), #for javascript styling
     Output('selected-neighborhoods', 'data'),
     Output('selected-display', 'children'),
     Input('year-slider', 'value'),
     Input('sector-dropdown', 'value'),
+    Input('map-mode', 'value'),
     Input('sf-geojson', 'n_clicks'),
-    Input('resilience-chart', 'clickData'),
+    Input('survival-chart', 'clickData'),
     State('sf-geojson', 'clickData'),
     State('selected-neighborhoods', 'data'),
 )
-def update_map(year, sector, map_clicks, scatter_click, map_click_data, selected):
+def update_map(year, sector, mode, map_clicks, scatter_click, map_click_data, selected):
+    clicked = None
+    
     if ctx.triggered_id == 'sf-geojson' and map_clicks and map_click_data:
         clicked = map_click_data['properties']['neighborhood']
-        if clicked in selected:
-            selected.remove(clicked)
-        elif len(selected) < 4:
-            selected.append(clicked)
-
-    elif ctx.triggered_id == 'resilience-chart' and scatter_click:
+    elif ctx.triggered_id == 'survival-chart' and scatter_click:
         clicked = scatter_click['points'][0]['text']
+
+    if clicked:
         if clicked in selected:
             selected.remove(clicked)
         elif len(selected) < 4:
@@ -304,13 +341,14 @@ def update_map(year, sector, map_clicks, scatter_click, map_click_data, selected
     label = pills if selected else 'No neighborhoods selected'
 
     return (
-        make_geojson(year, sector),
+        make_geojson('recovery' if mode == 'recovery' else year, sector),
         dict(selected=selected, low=0.0, high=2.0, mid=1.0),
         selected,
         label,
     )
 
 
+# updating demographics bar chart whenever new neighborhood clicked
 @callback(
     Output('demographics-chart', 'figure'),
     Output('income-display', 'children'),
@@ -319,22 +357,24 @@ def update_map(year, sector, map_clicks, scatter_click, map_click_data, selected
 def update_demographics(selected):
     fig = go.Figure()
 
-    city_row = city_demo.iloc[0]
+    #sf citwide bar constant
     fig.add_trace(go.Bar(
         name='San Francisco (citywide)',
         x=race_labels,
-        y=[city_row[c] * 100 for c in race_cols],
+        y=[city_demo[c] * 100 for c in race_cols],
         marker_color=city_color, opacity=0.5,
     ))
 
+    #adding list of median income divs, with SF as constant
     income_pills = [html.Div([
         html.Div(
-            f"${city_row['median_income']:,.0f}" if pd.notna(city_row['median_income']) else 'No data',
+            f"${city_demo['median_income']:,.0f}" if pd.notna(city_demo['median_income']) else 'No data',
             style={'fontSize': '18px', 'fontWeight': '600', 'color': city_color},
         ),
-        html.Div('San Francisco', style={'fontSize': '11px', 'color': '#aaa'}),
+        html.Div('San Francisco', style={'fontSize': '11px', 'color': 'darkgray'}),
     ], style={'textAlign': 'center'})]
 
+    #picking out each row in selected, then adding a bar for it to the group
     for i, neighborhood in enumerate(selected):
         if neighborhood not in demo['neighborhood'].values:
             continue
@@ -345,12 +385,14 @@ def update_demographics(selected):
             y=[row[c] * 100 for c in race_cols],
             marker_color=colors[i],
         ))
+        #appending the income data to the income_pills list of divs
         income_str = f"${row['median_income']:,.0f}" if pd.notna(row['median_income']) else 'No data'
         income_pills.append(html.Div([
             html.Div(income_str, style={'fontSize': '18px', 'fontWeight': '600', 'color': colors[i]}),
-            html.Div(neighborhood, style={'fontSize': '11px', 'color': '#aaa'}),
+            html.Div(neighborhood, style={'fontSize': '11px', 'color': 'darkgray'}),
         ], style={'textAlign': 'center'}))
 
+    #chart styling, grouping the bars
     fig.update_layout(
         barmode='group', height=200,
         margin=dict(l=20, r=20, t=10, b=20),
@@ -363,6 +405,8 @@ def update_demographics(selected):
     return fig, income_pills
 
 
+
+#update the line chart whenever new sector or neighbhorhood selected
 @callback(
     Output('sector-chart', 'figure'),
     Output('sector-chart-title', 'children'),
@@ -373,41 +417,44 @@ def update_sector_chart(selected, sector):
     fig = go.Figure()
 
     if sector == 'All':
-        city_df = neighs_year[neighs_year['year'] <= 2024].groupby('year')[['opened', 'closed']].sum().reset_index()
+        city_df = neighs_year.groupby('year')[['opened', 'closed']].sum().reset_index()
     else:
-        city_df = naics_neighs[
-            (naics_neighs['naics_group'] == sector) & (naics_neighs['year'] <= 2024)
-        ].groupby('year')[['opened', 'closed']].sum().reset_index()
+        city_df = naics_neighs[naics_neighs['naics_group'] == sector].groupby('year')[['opened', 'closed']].sum().reset_index()
 
     city_df['open_close_ratio'] = city_df['opened'] / city_df['closed'].replace(0, float('nan'))
     fig.add_trace(go.Scatter(
         x=city_df['year'], y=city_df['open_close_ratio'],
         mode='lines+markers', name='SF citywide',
+        customdata=city_df[['opened', 'closed']].values,
+        hovertemplate='<b>%{fullData.name}</b><br>Opened: %{customdata[0]:,}<br>Closed: %{customdata[1]:,}<br>Ratio: %{y:.2f}<extra></extra>',
         line=dict(color=city_color, width=2, dash='dot'),
         marker=dict(size=4),
     ))
 
+    #grabbing the whole row of whatever neighs are selected
     for i, neighborhood in enumerate(selected):
         if sector == 'All':
-            df = neighs_year[
-                (neighs_year['neighborhood'] == neighborhood) & (neighs_year['year'] <= 2024)
-            ].sort_values('year')
+            df = neighs_year[neighs_year['neighborhood'] == neighborhood].sort_values('year')
         else:
             df = naics_neighs[
                 (naics_neighs['neighborhood'] == neighborhood) &
-                (naics_neighs['naics_group'] == sector) &
-                (naics_neighs['year'] <= 2024)
-            ].copy().sort_values('year')
-            df['open_close_ratio'] = df['opened'] / df['closed'].replace(0, float('nan'))
+                (naics_neighs['naics_group'] == sector)
+            ].sort_values('year')
 
+        #then plotting that row using the year and ratio, opened/closed on hover
         fig.add_trace(go.Scatter(
             x=df['year'], y=df['open_close_ratio'],
             mode='lines+markers', name=neighborhood,
+            customdata=df[['opened', 'closed']].values,
+            hovertemplate='<b>%{fullData.name}</b><br>Opened: %{customdata[0]:,}<br>Closed: %{customdata[1]:,}<br>Ratio: %{y:.2f}<extra></extra>',
             line=dict(color=colors[i], width=2),
             marker=dict(size=5),
         ))
 
-    fig.add_hline(y=1, line_dash='dash', line_color='#ddd', line_width=1)
+    #showing midline of equal ratio
+    fig.add_hline(y=1, line_dash='dash', line_color='gainsboro', line_width=1)
+    
+    #chart styling
     fig.update_layout(
         height=240,
         margin=dict(l=20, r=10, t=10, b=20),
@@ -417,95 +464,101 @@ def update_sector_chart(selected, sector):
         yaxis=dict(range=[0, None], title=dict(text='Open/Close Ratio', font=dict(size=11)), **axis),
         xaxis=dict(title=dict(text='Year', font=dict(size=11)), tickfont=dict(size=10)),
     )
-    return fig, f'Opening/Closing Ratio Over Time for {sector} businesses'
+    return fig, f'Opening/Closing Ratio Over Time for {sector} Businesses'
 
 
+
+#survival chart, changes on selection and sector change
 @callback(
-    Output('resilience-chart', 'figure'),
+    Output('survival-chart', 'figure'),
+    Output('survival-chart-title', 'children'),
     Input('selected-neighborhoods', 'data'),
     Input('sector-dropdown', 'value'),
 )
-def update_resilience_chart(selected, sector):
-    if sector == 'All':
-        df = resilience.copy()
-    else:
-        df = resilience_by_sector[resilience_by_sector['naics_group'] == sector].copy()
+def update_survival_chart(selected, sector):
+    df = survival_by_sector[survival_by_sector['naics_group'] == sector].copy()
+    s = survival_stats[sector]
 
-    x_min, x_max = df['covid_ratio'].min(), df['covid_ratio'].max()
-    y_min, y_max = df['recovery_ratio'].min(), df['recovery_ratio'].max()
-    x_pad = (x_max - x_min) * 0.08
-    y_pad = (y_max - y_min) * 0.08
+    #setting bounds from precomputed bounds in survival_stats
+    x_min, x_max, y_min, y_max = s['x_min'], s['x_max'], s['y_min'], s['y_max']
+    x_pad, y_pad, x_mean = s['x_pad'], s['y_pad'], s['x_mean']
+
+    #setting hover template, variables in brackets 
+    hover = '<b>%{text}</b><br>Survival rate: %{x:.1%}<br>Recovery vitality: %{y:.2f}<br>Pre-2020 businesses: %{customdata:,}<extra></extra>'
 
     fig = go.Figure()
 
+    #adding baseline scatterdots for unselected
     unselected = df[~df['neighborhood'].isin(selected)]
     fig.add_trace(go.Scatter(
-        x=unselected['covid_ratio'],
+        x=unselected['survival_rate'],
         y=unselected['recovery_ratio'],
-        mode='markers+text',
+        mode='markers',
         text=unselected['neighborhood'],
         textposition='top center',
-        textfont=dict(size=7, color='#bbb'),
-        hovertemplate='<b>%{text}</b><br>Pandemic vitality: %{x:.2f}<br>Recovery vitality: %{y:.2f}<extra></extra>',
+        textfont=dict(size=7, color='silver'),
+        customdata=unselected['total'],
+        hovertemplate=hover,
         marker=dict(size=8, color='#5B8DB8', opacity=0.9, line=dict(width=0)),
         showlegend=False,
     ))
 
+    #grabbing the whole row for selected neighborhoods 
     for i, neighborhood in enumerate(selected):
         row = df[df['neighborhood'] == neighborhood]
-        if row.empty:
-            continue
+        if row.empty: #if no businesses in that neigh/sector combo
+            continue 
+        #adding a highlighted dot for selected neighs
         fig.add_trace(go.Scatter(
-            x=row['covid_ratio'],
+            x=row['survival_rate'],
             y=row['recovery_ratio'],
             mode='markers+text',
             text=row['neighborhood'],
             textposition='top center',
             textfont=dict(size=9, color=colors[i]),
-            hovertemplate='<b>%{text}</b><br>Pandemic vitality: %{x:.2f}<br>Recovery vitality: %{y:.2f}<extra></extra>',
+            customdata=row['total'],
+            hovertemplate=hover,
             marker=dict(size=14, color=colors[i], line=dict(width=1, color='white')),
             name=neighborhood,
         ))
 
-    fig.add_shape(type='line', x0=1.0, x1=1.0, y0=y_min - y_pad, y1=y_max + y_pad,
-                  line=dict(dash='dash', color='#ddd', width=1))
-    fig.add_shape(type='line', x0=x_min - x_pad, x1=x_max + x_pad, y0=1.0, y1=1.0,
-                  line=dict(dash='dash', color='#ddd', width=1))
-
-    fig.add_annotation(x=1.0, y=y_max + y_pad, text='← equal change →',
+    #adding midlines and labels on midlines
+    fig.add_shape(type='line', x0=x_mean, x1=x_mean, y0=y_min - y_pad, y1=y_max + y_pad,
+                  line=dict(dash='dash', color='gainsboro', width=1))
+    fig.add_annotation(x=x_mean, y=y_max + y_pad, text='Average survival rate',
                        showarrow=False, xanchor='center', yanchor='bottom',
-                       font=dict(size=9, color='#aaa'))
-    fig.add_annotation(x=x_max + x_pad, y=1.0, text='equal change',
-                       showarrow=False, xanchor='left', yanchor='middle',
-                       font=dict(size=9, color='#aaa'), textangle=-90)
+                       font=dict(size=9, color='darkgray'))
+    fig.add_shape(type='line', x0=x_min - x_pad, x1=x_max + x_pad, y0=1.0, y1=1.0,
+                  line=dict(dash='dash', color='gainsboro', width=1))
 
+    #adding quadrant labels
     for x, y, text, xanchor, yanchor in [
-        (x_max + x_pad * 0.5, y_max + y_pad * 0.5, 'Growth during COVID +<br>Strong recovery',  'right', 'top'),
-        (x_min - x_pad * 0.5, y_max + y_pad * 0.5, 'Decline during COVID +<br>Strong recovery', 'left',  'top'),
-        (x_min - x_pad * 0.5, y_min - y_pad * 0.5, 'Decline during COVID +<br>Weak recovery',   'left',  'bottom'),
-        (x_max + x_pad * 0.5, y_min - y_pad * 0.5, 'Growth during COVID +<br>Weak recovery',    'right', 'bottom'),
-    ]:
+        (x_max + x_pad * 0.5, y_max + y_pad * 0.5, 'High survival +<br>Post-COVID growth',  'right', 'top'),
+        (x_min - x_pad * 0.5, y_max + y_pad * 0.5, 'Low survival +<br>Post-COVID growth',   'left',  'top'),
+        (x_min - x_pad * 0.5, y_min - y_pad * 0.5, 'Low survival +<br>Post-COVID decline',     'left',  'bottom'),
+        (x_max + x_pad * 0.5, y_min - y_pad * 0.5, 'High survival +<br>Post-COVID growth decline',    'right', 'bottom'),
+    ]:  #shared styling
         fig.add_annotation(x=x, y=y, text=text, showarrow=False,
                            xanchor=xanchor, yanchor=yanchor,
-                           font=dict(size=10, color='#555'),
+                           font=dict(size=10, color='dimgray'),
                            bgcolor='rgba(255,255,255,0.85)',
-                           bordercolor='#ddd', borderwidth=1, borderpad=6)
+                           bordercolor='gainsboro', borderwidth=1, borderpad=6)
 
+    #chart styling
     fig.update_layout(
-        title=dict(text='Business Pandemic Resilience by Neighborhood', font=dict(size=13, color='#444'), x=0),
-        xaxis=dict(title=dict(text='Openings/Closings Ratio During Pandemic (2020–2021)', font=dict(size=11)),
-                   range=[x_min - x_pad, x_max + x_pad], **axis),
+        xaxis=dict(title=dict(text='Survival Rate (% of pre-2020 businesses still open in 2024)', font=dict(size=11)),
+                   tickformat='.0%', range=[x_min - x_pad, x_max + x_pad], **axis),
         yaxis=dict(title=dict(text='Openings/Closings Ratio During Recovery (2022–2024)', font=dict(size=11)),
                    range=[y_min - y_pad, y_max + y_pad], **axis),
         height=420,
-        margin=dict(l=20, r=20, t=40, b=20),
+        margin=dict(l=20, r=20, t=10, b=20),
         plot_bgcolor='white',
         paper_bgcolor='rgba(0,0,0,0)',
         legend=dict(font=dict(size=9)),
         font=dict(family='-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif'),
     )
-    return fig
+    return fig, f'Pre-2020 Business Survival Rate vs. Recovery — {sector} businesses'
 
-
+#running the app
 if __name__ == '__main__':
-    app.run(debug=False)
+    app.run(debug=True)
