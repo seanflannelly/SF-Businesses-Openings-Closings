@@ -24,10 +24,10 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
             }
 
             return {
-                fillColor: isSelected ? '#27ae60' : `rgb(${r},${g},${b})`,
+                fillColor: `rgb(${r},${g},${b})`,
                 fillOpacity: 1,
-                color: 'white',
-                weight: 2,
+                color: isSelected ? '#27ae60' : 'white',
+                weight: isSelected ? 4 : 2,
                 opacity: 1,
             };
         }

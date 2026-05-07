@@ -67,6 +67,7 @@ for sector, grp in survival_df.groupby('naics_group'):
         x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max,
         x_pad=x_pad, y_pad=y_pad,
         x_mean=grp['survival_rate'].mean(),
+        citywide_rate=grp['citywide_rate'].iloc[0],
     ))
 survival_stats_df = pd.DataFrame(rows)
 

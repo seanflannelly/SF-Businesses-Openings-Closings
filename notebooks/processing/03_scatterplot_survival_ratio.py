@@ -35,7 +35,7 @@ biz_exp.loc[no_code, 'naics_group'] = biz_exp.loc[no_code, 'lic_code'].apply(ass
 
 def get_sector_df(sector):
     if sector == 'All':
-        rec = recovery[['neighborhood', 'recovery_ratio']].copy()
+        rec = recovery[['neighborhood', 'recovery_ratio', 'opened', 'closed']].copy()
         biz = biz_df.drop_duplicates('uniqueid')
     else:
         src = naics_df[(naics_df['naics_group'] == sector) & (naics_df['year'].between(2022, 2024))]
@@ -43,7 +43,11 @@ def get_sector_df(sector):
         rec['recovery_ratio'] = rec['opened'] / rec['closed'].replace(0, float('nan'))
         biz = biz_exp[biz_exp['naics_group'] == sector].drop_duplicates('uniqueid')
 
-    pre2020 = biz[biz['location_start_date'] < '2020-01-01'].copy()
+    # businesses that were actually open when the pandemic hit — started before 2020, not yet closed
+    pre2020 = biz[
+        (biz['location_start_date'] < '2020-01-01') &
+        (biz['location_end_date'].isna() | (biz['location_end_date'] >= '2020-01-01'))
+    ].copy()
     pre2020['survived'] = pre2020['location_end_date'].isna() | (pre2020['location_end_date'] >= '2024-01-01')
     surv = (
         pre2020.groupby('neighborhoods_analysis_boundaries')
@@ -53,7 +57,7 @@ def get_sector_df(sector):
     )
     surv['survival_rate'] = surv['survived'] / surv['total']
 
-    merged = rec[['neighborhood', 'recovery_ratio']].merge(
+    merged = rec[['neighborhood', 'recovery_ratio', 'opened', 'closed']].merge(
         surv[['neighborhood', 'survival_rate', 'total']], on='neighborhood'
     ).dropna()
     merged = merged[merged['neighborhood'].isin(active_neighs)]
@@ -97,11 +101,23 @@ fig.update_layout(
 )
 fig.show()
 
+# citywide survival rate per sector computed from raw business data (not neighborhood aggregates)
+citywide_rates = {}
+for s in all_sectors:
+    b = biz_df.drop_duplicates('uniqueid') if s == 'All' else biz_exp[biz_exp['naics_group'] == s].drop_duplicates('uniqueid')
+    pre = b[
+        (b['location_start_date'] < '2020-01-01') &
+        (b['location_end_date'].isna() | (b['location_end_date'] >= '2020-01-01'))
+    ]
+    survived = pre['location_end_date'].isna() | (pre['location_end_date'] >= '2024-01-01')
+    citywide_rates[s] = survived.mean() if len(pre) > 0 else float('nan')
+
 # export survival data for all sectors
 rows = []
 for s in all_sectors:
     d = sector_data[s].copy()
     d['naics_group'] = s
+    d['citywide_rate'] = citywide_rates[s]
     rows.append(d)
 survival = pd.concat(rows, ignore_index=True)
 survival.to_parquet('../../data/processed/app/survival_by_sector.parquet', index=False)

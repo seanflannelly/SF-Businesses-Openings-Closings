@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 app = Dash(__name__)
 server = app.server  
 
-# --- data ---------------------------------------------------------- --------------------------------------------------
+# --- data ----------------------------------------------------------------
 # neighs_year: one row per neighborhood per year, all sectors combined
 # naics_neighs: one row per neighborhood per year per sector (one business with multiple codes can appear in multiple sectors)
 # survival_by_sector: pre-2020 survival rate + recovery ratio per neighborhood per sector
@@ -22,15 +22,11 @@ survival_by_sector = pd.read_parquet('data/processed/app/survival_by_sector.parq
 survival_stats     = pd.read_parquet('data/processed/app/survival_stats.parquet').set_index('naics_group').to_dict('index')
 
 years   = sorted(neighs_year['year'].unique().tolist())
-sectors = sorted(naics_neighs['naics_group'].unique().tolist())
-
-slider_years = {}
-for y in years:
-    slider_years[int(y)] = str(y)
+sectors = sorted(s for s in naics_neighs['naics_group'].unique() if s != 'No Code') + ['No Code']
 
 # need to make a new geojson out of the neighs_year for the tooltip property in leaflet
 # this gets called on map startup and on update_map callback
-def make_geojson(year, sector='All'):
+def make_geojson(year, sector='All', selected=[]):
     if year == 'recovery':
         # aggregate 2022-2024 for the recovery period view
         if sector == 'All':
@@ -54,7 +50,10 @@ def make_geojson(year, sector='All'):
         'Closed: ' + gdf['closed'].fillna('N/A').astype(str) + '<br>' +
         'Ratio: ' + gdf['open_close_ratio'].round(2).fillna('N/A').astype(str)
     )
-    return json.loads(gdf.to_json())
+    geojson = json.loads(gdf.to_json())
+    # selected features sorted to end so they're painted last in SVG, keeping their border on top
+    geojson['features'].sort(key=lambda f: f['properties']['neighborhood'] in selected)
+    return geojson
 
 
 # --- constants -----------------------------------------------------
@@ -62,6 +61,10 @@ default_selection = []
 default_year   = 2019
 default_sector = 'All'
 default_mode   = 'recovery'
+
+slider_years = {}
+for y in years:
+    slider_years[int(y)] = str(y)
 
 colors     = ['#378ADD', '#E87040', '#4CAF50', '#9C27B0']  # up to 4 neighborhoods
 city_color = '#2C7BB6'
@@ -104,10 +107,10 @@ function(feature, context) {
     }
 
     return {
-        fillColor: isSelected ? '#27ae60' : `rgb(${r},${g},${b})`,
+        fillColor: `rgb(${r},${g},${b})`,
         fillOpacity: 1,
-        color: 'white',
-        weight: 2,
+        color: isSelected ? '#27ae60' : 'white',
+        weight: isSelected ? 4 : 2,
         opacity: 1,
     };
 }
@@ -341,7 +344,7 @@ def update_map(year, sector, mode, map_clicks, scatter_click, map_click_data, se
     label = pills if selected else 'No neighborhoods selected'
 
     return (
-        make_geojson('recovery' if mode == 'recovery' else year, sector),
+        make_geojson('recovery' if mode == 'recovery' else year, sector, selected),
         dict(selected=selected, low=0.0, high=2.0, mid=1.0),
         selected,
         label,
@@ -451,7 +454,12 @@ def update_sector_chart(selected, sector):
             marker=dict(size=5),
         ))
 
-    #showing midline of equal ratio
+    # shaded band over 2020-2021 to mark the pandemic period
+    fig.add_vrect(x0=2020, x1=2021.5, fillcolor='gainsboro', opacity=0.3, line_width=0,
+                  annotation_text='COVID-19', annotation_position='top left',
+                  annotation_font=dict(size=10, color='darkgray'))
+
+    # midline at ratio=1 marks equal openings and closings
     fig.add_hline(y=1, line_dash='dash', line_color='gainsboro', line_width=1)
     
     #chart styling
@@ -481,10 +489,10 @@ def update_survival_chart(selected, sector):
 
     #setting bounds from precomputed bounds in survival_stats
     x_min, x_max, y_min, y_max = s['x_min'], s['x_max'], s['y_min'], s['y_max']
-    x_pad, y_pad, x_mean = s['x_pad'], s['y_pad'], s['x_mean']
+    x_pad, y_pad, x_mean, citywide_rate = s['x_pad'], s['y_pad'], s['x_mean'], s['citywide_rate']
 
     #setting hover template, variables in brackets 
-    hover = '<b>%{text}</b><br>Survival rate: %{x:.1%}<br>Recovery vitality: %{y:.2f}<br>Pre-2020 businesses: %{customdata:,}<extra></extra>'
+    hover = '<b>%{text}</b><br>Survival rate: %{x:.1%}<br>Pre-2020 businesses: %{customdata[0]:,}<br>Opened 2022–2024: %{customdata[1]:,}<br>Closed 2022–2024: %{customdata[2]:,}<br>Open/close ratio: %{y:.2f}<extra></extra>'
 
     fig = go.Figure()
 
@@ -497,7 +505,7 @@ def update_survival_chart(selected, sector):
         text=unselected['neighborhood'],
         textposition='top center',
         textfont=dict(size=7, color='silver'),
-        customdata=unselected['total'],
+        customdata=unselected[['total', 'opened', 'closed']].values,
         hovertemplate=hover,
         marker=dict(size=8, color='#5B8DB8', opacity=0.9, line=dict(width=0)),
         showlegend=False,
@@ -516,7 +524,7 @@ def update_survival_chart(selected, sector):
             text=row['neighborhood'],
             textposition='top center',
             textfont=dict(size=9, color=colors[i]),
-            customdata=row['total'],
+            customdata=row[['total', 'opened', 'closed']].values,
             hovertemplate=hover,
             marker=dict(size=14, color=colors[i], line=dict(width=1, color='white')),
             name=neighborhood,
@@ -525,7 +533,7 @@ def update_survival_chart(selected, sector):
     #adding midlines and labels on midlines
     fig.add_shape(type='line', x0=x_mean, x1=x_mean, y0=y_min - y_pad, y1=y_max + y_pad,
                   line=dict(dash='dash', color='gainsboro', width=1))
-    fig.add_annotation(x=x_mean, y=y_max + y_pad, text='Average survival rate',
+    fig.add_annotation(x=x_mean, y=y_max + y_pad, text=f'Citywide: {citywide_rate:.0%} survived to 2024',
                        showarrow=False, xanchor='center', yanchor='bottom',
                        font=dict(size=9, color='darkgray'))
     fig.add_shape(type='line', x0=x_min - x_pad, x1=x_max + x_pad, y0=1.0, y1=1.0,
@@ -551,7 +559,7 @@ def update_survival_chart(selected, sector):
         yaxis=dict(title=dict(text='Openings/Closings Ratio During Recovery (2022–2024)', font=dict(size=11)),
                    range=[y_min - y_pad, y_max + y_pad], **axis),
         height=420,
-        margin=dict(l=20, r=20, t=10, b=20),
+        margin=dict(l=20, r=20, t=30, b=20),
         plot_bgcolor='white',
         paper_bgcolor='rgba(0,0,0,0)',
         legend=dict(font=dict(size=9)),
@@ -561,4 +569,4 @@ def update_survival_chart(selected, sector):
 
 #running the app
 if __name__ == '__main__':
-    app.run(debug=False)
+    app.run(debug=True)
