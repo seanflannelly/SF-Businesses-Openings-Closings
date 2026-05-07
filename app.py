@@ -198,6 +198,20 @@ app.layout = html.Div([
 
         ], style={'display': 'flex', 'gap': '16px'}),
 
+        # second sector dropdown — visible when sticky bar has scrolled out of view
+        html.Div([
+            html.Span('Sector:', style={'fontSize': '13px', 'fontWeight': '600', 'color': '#374151'}),
+            dcc.Dropdown(
+                id='sector-dropdown-2',
+                options=[{'label': 'All Sectors', 'value': 'All'}] +
+                        [{'label': s, 'value': s} for s in sectors],
+                value=default_sector,
+                clearable=False,
+                style={'width': '260px', 'fontSize': '13px'},
+            ),
+        ], style={'display': 'flex', 'alignItems': 'center', 'gap': '10px',
+                  'padding': '10px 0', 'borderBottom': '1px solid #e2e4e9'}),
+
         # pandemic resilience scatter — all sectors, click to select neighborhoods
         html.Div([
             html.Div([
@@ -211,6 +225,17 @@ app.layout = html.Div([
 
 
 # ── callbacks ─────────────────────────────────────────────────────────────────
+
+@callback(
+    Output('sector-dropdown', 'value', allow_duplicate=True),
+    Output('sector-dropdown-2', 'value', allow_duplicate=True),
+    Input('sector-dropdown', 'value'),
+    Input('sector-dropdown-2', 'value'),
+    prevent_initial_call=True,
+)
+def sync_sector_dropdowns(val1, val2):
+    return (val1, val1) if ctx.triggered_id == 'sector-dropdown' else (val2, val2)
+
 
 @callback(
     Output('year-slider', 'max'),

@@ -20,7 +20,7 @@ h1 {
 
 .app-wrapper {
     background: #f4f5f7;
-    padding: 28px 32px;
+    padding: 0 32px 28px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     max-width: 1400px;
     margin: 0 auto;
@@ -36,13 +36,14 @@ h1 {
 .map-overlay {
     position: absolute;
     top: 16px;
-    left: 60px;
+    right: 16px;
     z-index: 1000;
     background: rgba(255,255,255,0.92);
     padding: 10px 14px;
     border-radius: 6px;
     box-shadow: 0 1px 4px rgba(0,0,0,0.1);
     pointer-events: none;
+    text-align: right;
 }
 
 .pill {
@@ -85,4 +86,11 @@ h1 {
 
 .leaflet-tooltip {
     font-weight: normal;
+}
+
+p {
+    margin: 8px 0;
+    color: #374151;
+    font-size: 14px;
+    line-height: 1.5;
 }
