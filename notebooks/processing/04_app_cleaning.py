@@ -1,9 +1,6 @@
 import json
 import pandas as pd
 import geopandas as gpd
-import os
-
-os.makedirs('data/processed/app', exist_ok=True)
 
 # load
 neighs_year_gdf  = gpd.read_parquet('data/processed/ALL_openings_closings_by_neighs_year.parquet')
@@ -13,7 +10,7 @@ demo_df          = pd.read_parquet('data/processed/demographics_by_neighs.parque
 sf_city_demo     = pd.read_parquet('data/processed/demographics_sf_city.parquet')
 resilience_df    = pd.read_parquet('data/processed/pandemic_resilience.parquet')
 
-# clean tabular data
+# cleaning
 neighs_year_df  = pd.DataFrame(neighs_year_gdf.drop(columns='geometry'))
 naics_neighs_df = pd.DataFrame(naics_neighs_gdf.drop(columns='geometry'))
 
@@ -38,12 +35,31 @@ naics_neighs_df = naics_neighs_df[naics_neighs_df['neighborhood'].isin(active_ne
 sf_neigh        = sf_neigh[sf_neigh['neighborhood'].isin(active_neighs)].copy()
 sf_neigh['geometry'] = sf_neigh.geometry.simplify(0.0005, preserve_topology=True)
 
+# compute resilience per sector using the same covid/recovery windows as the all-sector version
+def resilience_per_sector(df):
+    covid = df[df['year'].isin([2020, 2021])].groupby('neighborhood')[['opened', 'closed']].sum()
+    covid['covid_ratio'] = covid['opened'] / covid['closed'].replace(0, float('nan'))
+    recovery = df[df['year'].isin([2022, 2023, 2024])].groupby('neighborhood')[['opened', 'closed']].sum()
+    recovery['recovery_ratio'] = recovery['opened'] / recovery['closed'].replace(0, float('nan'))
+    return (covid[['covid_ratio']]
+            .join(recovery[['recovery_ratio']], how='inner')
+            .dropna()
+            .reset_index())
+
+sectors = []
+for sector, grp in naics_neighs_df.groupby('naics_group'):
+    part = resilience_per_sector(grp)
+    part['naics_group'] = sector
+    sectors.append(part)
+resilience_by_sector_df = pd.concat(sectors, ignore_index=True)
+
 # export
 neighs_year_df.to_parquet('data/processed/app/neighs_year.parquet', index=False)
 naics_neighs_df.to_parquet('data/processed/app/naics_neighs.parquet', index=False)
 demo_df.to_parquet('data/processed/app/demographics.parquet', index=False)
 sf_city_demo.to_parquet('data/processed/app/demographics_city.parquet', index=False)
 resilience_df.to_parquet('data/processed/app/resilience.parquet', index=False)
+resilience_by_sector_df.to_parquet('data/processed/app/resilience_by_sector.parquet', index=False)
 sf_neigh.to_file('data/processed/app/neighborhoods.geojson', driver='GeoJSON')
 
 print('done')

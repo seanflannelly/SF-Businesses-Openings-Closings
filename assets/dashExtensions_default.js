@@ -28,7 +28,7 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
                 fillOpacity: 1,
                 color: 'white',
                 weight: 2,
-                opacity: 1
+                opacity: 1,
             };
         }
 
