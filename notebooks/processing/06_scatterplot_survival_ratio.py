@@ -1,3 +1,13 @@
+"""
+06 - Scatterplot Survival Ratio
+
+For each SF neighborhood, computes the pre-2020 business survival rate (share of businesses
+open before 2020 that were still open by 2024) and the post-pandemic recovery vitality ratio
+(2022-2024 openings/closings). Generates a scatter by
+NAICS sector. Exports the combined survival and recovery data to
+data/processed/app/survival_by_sector.parquet.
+"""
+
 import sys
 import pandas as pd
 import geopandas as gpd

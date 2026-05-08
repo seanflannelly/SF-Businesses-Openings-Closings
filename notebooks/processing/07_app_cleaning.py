@@ -1,3 +1,13 @@
+"""
+07 - App Cleaning
+
+Loads all processed data (neighborhood openings/closings, NAICS breakdowns, demographics,
+resilience metrics, and survival rates) and prepares app-ready parquets. Filters to
+neighborhoods with at least 500 business events (2020-2024), computes open/close ratios,
+derives per-sector pandemic resilience scores, precomputes axis bounds for the scatter chart,
+and exports everything to data/processed/app/.
+"""
+
 import json
 import pandas as pd
 import geopandas as gpd
