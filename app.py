@@ -1,3 +1,17 @@
+"""
+SF Business Trends Dashboard
+
+Run with `python app.py` from the repo root. Requires all the parquets in
+data/processed/app/ to exist first — run notebooks 01-07 in order to generate them.
+
+The app is a Dash app with a Leaflet map of SF neighborhoods colored by their
+opening-to-closing ratio. You can toggle between a recovery period view (2022-2024
+aggregated) and a year-by-year slider. Clicking neighborhoods (up to 4) adds them
+to the charts below — a demographics breakdown, an open/close ratio over time line
+chart, and a survival scatter that plots pre-2020 survival rate vs. post-COVID
+recovery. Everything filters by the sector dropdown at the top.
+"""
+
 import json
 import pandas as pd
 import geopandas as gpd
@@ -22,7 +36,7 @@ survival_by_sector = pd.read_parquet('data/processed/app/survival_by_sector.parq
 survival_stats     = pd.read_parquet('data/processed/app/survival_stats.parquet').set_index('naics_group').to_dict('index')
 
 years   = sorted(neighs_year['year'].unique().tolist())
-sectors = sorted(s for s in naics_neighs['naics_group'].unique() if s != 'No Code') + ['No Code']
+sectors = sorted(s for s in naics_neighs['naics_group'].unique() if s != 'No Code') + ['No Code'] #ensuring no code is at the bottom
 
 # need to make a new geojson out of the neighs_year for the tooltip property in leaflet
 # this gets called on map startup and on update_map callback
