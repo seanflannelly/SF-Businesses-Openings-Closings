@@ -4,12 +4,12 @@ SF Business Trends Dashboard
 Run with `python app.py` from the repo root. Requires all the parquets in
 data/processed/app/ to exist first — run notebooks 01-07 in order to generate them.
 
-The app is a Dash app with a Leaflet map of SF neighborhoods colored by their
+The app has a Leaflet map of SF neighborhoods colored by their
 opening-to-closing ratio. You can toggle between a recovery period view (2022-2024
-aggregated) and a year-by-year slider. Clicking neighborhoods (up to 4) adds them
+aggregated) and a year-by-year slider that animates. Clicking neighborhoods (up to 4) adds them
 to the charts below — a demographics breakdown, an open/close ratio over time line
 chart, and a survival scatter that plots pre-2020 survival rate vs. post-COVID
-recovery. Everything filters by the sector dropdown at the top.
+recovery. Everything sorts by the sector dropdown at the top.
 """
 
 import json
