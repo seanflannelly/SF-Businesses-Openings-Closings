@@ -15,7 +15,6 @@ naics_neighs_gdf = gpd.read_parquet('data/processed/ALL_openings_closings_by_nai
 sf_neigh         = gpd.read_file('data/processed/polygons/sf_neighborhoods.geojson').to_crs(epsg=4326)
 demo_df          = pd.read_parquet('data/processed/demographics_by_neighs.parquet')
 sf_city_demo     = pd.read_parquet('data/processed/demographics_sf_city.parquet')
-resilience_df    = pd.read_parquet('data/processed/pandemic_resilience.parquet')
 
 # cleaning
 neighs_year_df  = pd.DataFrame(neighs_year_gdf.drop(columns='geometry'))
@@ -83,7 +82,6 @@ neighs_year_df.to_parquet('data/processed/app/neighs_year.parquet', index=False)
 naics_neighs_df.to_parquet('data/processed/app/naics_neighs.parquet', index=False)
 demo_df.to_parquet('data/processed/app/demographics.parquet', index=False)
 sf_city_demo.to_parquet('data/processed/app/demographics_city.parquet', index=False)
-resilience_df.to_parquet('data/processed/app/resilience.parquet', index=False)
 resilience_by_sector_df.to_parquet('data/processed/app/resilience_by_sector.parquet', index=False)
 survival_stats_df.to_parquet('data/processed/app/survival_stats.parquet', index=False)
 sf_neigh.to_file('data/processed/app/neighborhoods.geojson', driver='GeoJSON')
