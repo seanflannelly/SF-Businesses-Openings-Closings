@@ -135,7 +135,7 @@ function(feature, context) {
 #each 'id' is linked to a callback below
 app.layout = html.Div([
 
-    html.H1('San Francisco Neighborhood Business Trends', style={'padding':'1px'}),
+    html.H1('Business Growth and Decline in San Francisco by Neighborhood', style={'padding':'1px'}),
 
     # sector filter dropdown
     html.Div([
