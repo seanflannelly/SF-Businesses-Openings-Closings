@@ -16,7 +16,6 @@ naics_gdf = gpd.read_parquet(os.path.join(root, 'data/processed/ALL_openings_clo
 df = (
     pd.DataFrame(naics_gdf.drop(columns='geometry'))
     .query('2019 <= year <= 2024')
-    .query('naics_group != "No Code"')
     .groupby(['naics_group', 'year'])[['opened', 'closed']]
     .sum()
     .reset_index()
