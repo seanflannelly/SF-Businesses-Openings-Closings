@@ -83,7 +83,7 @@ for y in years:
 colors     = ['#378ADD', '#E87040', '#4CAF50', '#9C27B0']  # up to 4 neighborhoods
 city_color = '#2C7BB6'
 race_cols  = ['pct_white', 'pct_black', 'pct_asian', 'pct_latina_o', 'pct_other']
-race_labels = ['White', 'Black', 'Asian/PI', 'Latino', 'Other']
+race_labels = ['White', 'Black', 'Asian/PI', 'Hispanic/Latino', 'Other']
 
 card = {
     'background': 'white',
@@ -230,8 +230,12 @@ app.layout = html.Div([
                 html.Div(id='income-display',
                          style={'display': 'flex', 'gap': '24px', 'justifyContent': 'center',
                                 'flexWrap': 'wrap', 'padding': '4px 0'}),
-                html.P('Source: U.S. Census Bureau, American Community Survey 5-Year Estimates',
-                       style={'fontSize': '10px', 'color': 'darkgray', 'margin': '8px 0 0 0'}),
+                html.P([
+                    'Source: U.S. Census Bureau, American Community Survey 5-Year Estimates',
+                    html.Br(),
+                    'Estimates for White, Black and Asian/Pacific Islander are non-Hispanic. Other category includes '
+                    'American Indian/Alaska Native and Two or More Races. Pacific Islander includes Native Hawaiian',
+                ], style={'fontSize': '10px', 'color': 'darkgray', 'margin': '8px 0 0 0'}),
             ], style=card),
 
             # open/close ratio over time, filtered by the global sector dropdown
