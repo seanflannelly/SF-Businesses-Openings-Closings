@@ -60,7 +60,7 @@ for sector, grp in naics_neighs_df.groupby('naics_group'):
     sectors.append(part)
 resilience_by_sector_df = pd.concat(sectors, ignore_index=True)
 
-# precompute per-sector axis bounds for the resilience scatter chart
+# precompute per-sector axes for the resilience scatter chart
 survival_df = pd.read_parquet('data/processed/app/survival_by_sector.parquet')
 rows = []
 for sector, grp in survival_df.groupby('naics_group'):
