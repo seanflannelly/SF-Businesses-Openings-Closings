@@ -176,7 +176,6 @@ app.layout = html.Div([
                     data=make_geojson(default_mode, default_sector),
                     options=dict(style=style_handle),
                     hideout=dict(selected=default_selection, low=0.0, high=2.0, mid=1.0),
-                    zoomToBounds=True,
                 ),
                 #color bar
                 dl.Colorbar(

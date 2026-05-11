@@ -1,6 +1,4 @@
 import json
-import requests
-from io import BytesIO
 from pathlib import Path
 import geopandas as gpd
 import plotly.graph_objects as go
@@ -8,25 +6,33 @@ from plotly.subplots import make_subplots
 
 root = Path(__file__).parents[2]
 
-def load_hex(url):
-    gdf = gpd.read_parquet(BytesIO(requests.get(url).content)).to_crs(epsg=4326)
+def load_hex(path):
+    gdf = gpd.read_parquet(path).to_crs(epsg=4326)
     gdf = gdf[gdf["event_year"].between(2019, 2025)].copy()
     gdf["net_change"] = gdf["Opening"] - gdf["Closing"]
     return gdf
 
-fidi = load_hex("https://raw.githubusercontent.com/seanflannelly/SF-Businesses-Openings-Closings/main/data/processed/fidi_hex_open_close.parquet")
-bhp  = load_hex("https://raw.githubusercontent.com/seanflannelly/SF-Businesses-Openings-Closings/main/data/processed/bhp_hex_open_close.parquet")
+fidi = load_hex(root / "data/processed/fidi_hex_open_close.parquet")
+bhp  = load_hex(root / "data/processed/bhp_hex_open_close.parquet")
 
 geojson_fidi = json.loads(fidi.to_json())
 geojson_bhp  = json.loads(bhp.to_json())
 
 years = sorted(fidi["event_year"].dropna().astype(int).unique())
 
-fidi_scale = float(fidi["net_change"].abs().quantile(0.95))
-bhp_scale  = float(bhp["net_change"].abs().quantile(0.95))
+fidi_scale = float(fidi["net_change"].abs().quantile(0.99))
+bhp_scale  = float(bhp["net_change"].abs().quantile(0.99))
 
-fidi_totals = fidi.groupby("event_year")["net_change"].sum().astype(int).to_dict()
-bhp_totals  = bhp.groupby("event_year")["net_change"].sum().astype(int).to_dict()
+neighs_year = gpd.read_parquet(root / "data/processed/ALL_openings_closings_by_neighs_year.parquet")
+neighs_year = neighs_year[neighs_year["year"].between(2019, 2025)]
+
+def neigh_totals(name):
+    df = neighs_year[neighs_year["neighborhood"] == name].copy()
+    df["net_change"] = df["opened"] - df["closed"]
+    return df.set_index("year")["net_change"].astype(int).to_dict()
+
+fidi_totals = neigh_totals("Financial District/South Beach")
+bhp_totals  = neigh_totals("Bayview Hunters Point")
 
 def net_annotations(yr):
     return [

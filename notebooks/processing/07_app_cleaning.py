@@ -81,7 +81,17 @@ survival_stats_df = pd.DataFrame(rows)
 neighs_year_df.to_parquet('data/processed/app/neighs_year.parquet', index=False)
 naics_neighs_df.to_parquet('data/processed/app/naics_neighs.parquet', index=False)
 demo_df.to_parquet('data/processed/app/demographics.parquet', index=False)
-sf_city_demo.to_parquet('data/processed/app/demographics_city.parquet', index=False)
+city_row = sf_city_demo.iloc[0]
+pop = city_row['population']
+sf_city_demo_pct = pd.DataFrame([{
+    'pct_white':    city_row['white']    / pop,
+    'pct_black':    city_row['black']    / pop,
+    'pct_asian':    (city_row['asian'] + city_row['nhpi']) / pop,
+    'pct_latina_o': city_row['latina_o'] / pop,
+    'pct_other':    (city_row['aian'] + city_row['other']) / pop,
+    'median_income': city_row['median_income'],
+}])
+sf_city_demo_pct.to_parquet('data/processed/app/demographics_city.parquet', index=False)
 resilience_by_sector_df.to_parquet('data/processed/app/resilience_by_sector.parquet', index=False)
 survival_stats_df.to_parquet('data/processed/app/survival_stats.parquet', index=False)
 sf_neigh.to_file('data/processed/app/neighborhoods.geojson', driver='GeoJSON')
