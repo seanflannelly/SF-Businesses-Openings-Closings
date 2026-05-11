@@ -1,17 +1,19 @@
-# SF Business Openings and Closings by Neighborhood
+# San Francisco Business Openings and Closings by Neighborhood
 
-CYPLAN 255 — Urban Informatics and Data Visualization, UC Berkeley
+CYPLAN 255: Urban Informatics and Data Visualization, UC Berkeley (Spring 2026)
 
 Abigail Lambert, Mia Flynn, Sean Flannelly
 
 ---
 
-This project tracks business openings and closings across SF neighborhoods using business registration data from the Treasurer and Tax Collector's Office. We look at how the pandemic reshaped commercial activity across the city and whether those patterns line up with race and income.
+This project tracks business openings and closings across SF neighborhoods using business registration data from the Treasurer and Tax Collector's Office. We examine how the COVID-19 pandemic reshaped commercial activity across the city, including how this relates to demographic variability and business sector within each neighborhood.
 
 ## Data
 
 - [SF Open Data — Registered Business Locations](https://data.sfgov.org/Economy-and-Community/Registered-Business-Locations-San-Francisco/g8m3-pdis/about_data)
 - U.S. Census Bureau American Community Survey 5-year estimates (neighborhood demographics)
+- Map of 2020 Census Tracts Assigned to Analysis Neighborhoods (https://data.sfgov.org/Geographic-Locations-and-Boundaries/Map-of-2020-Census-Tracts-Assigned-to-Analysis-Nei/rqw6-h7c5)
+- San Francisco Analysis Neighborhoods (https://data.sfgov.org/-/Analysis-Neighborhoods/p5b7-5n3h)
 
 ## Repo Structure
 
@@ -36,7 +38,3 @@ pip install -r requirements.txt
 python app.py
 # open index.html in a browser
 ```
-
-## Key Findings
-
-coming soon
