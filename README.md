@@ -18,8 +18,8 @@ This project tracks business openings and closings across SF neighborhoods using
 ## Repo Structure
 
 ```
-notebooks/processing/       # cleaning scripts, run 01–07
-notebooks/visualizations/   # charts for the site
+notebooks/processing/       # cleaning scripts, run 01–08
+notebooks/visualizations/   # charts for the site, run 01-04 to regenerate
 data/raw/                   # SF geometries
 data/processed/             # generated parquets
 src/functions.py            # shared utilities
@@ -28,6 +28,7 @@ index.html                  # site wrapper
 css/                        # site styles
 assets/                     # Dash assets (custom css, js)
 outputs/                    # exported chart htmls
+img/                        # screenshots of app for demonstration
 ```
 
 ## Running Locally
