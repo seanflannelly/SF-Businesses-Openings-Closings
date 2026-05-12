@@ -20,6 +20,10 @@ h2, h3 {
     color: #333;
 }
 
+strong {
+    margin-bottom: 20px;
+}
+
 .app-wrapper {
     background: white;
     padding: 24px 32px 36px;
